@@ -5,10 +5,10 @@
 //Date: 2020-11-17 17:03 Beijing
 //Author: shinsya
 
-
+//本库中函数的字符串指针返回值在释放时应使用 delete[]的方式
 #ifndef BS64_VA_H
 #define BS64_VA_H
-#define BS64_V "1.0"
+#define BS64_V "1.1"
 #define MAX_SOURCE_LEN 4096
 #define MAX_CODE_LEN (MAX_SOURCE_LEN / 3 * 4)
 
@@ -32,9 +32,10 @@ char* bs64v_encode(char* source) {
 	int bs64code_len = source_len / 3 * 4;	//源数据3字节化4字节
 	if (source_len % 3)bs64code_len+=4;		//若原数据长度不为3的倍数字节，则额外4字节
 	if (!source_len)return 0;
-	char* rt_code = new char[bs64code_len + 1];	//将返回的数据
-	if (!rt_code)return 0;
-	rt_code[bs64code_len] = '\0';			//字符串末尾结束符
+	char* rt_code;	//将返回的数据
+	try{ rt_code = new char[bs64code_len + 1](); }
+	catch (std::bad_alloc) { return 0; }
+
 	
 	int i = 0, j = 0;
 	for(;i < bs64code_len-4;i+=4,j+=3){				//3字节化4字节，3字节为一组，6位取一字节
@@ -45,20 +46,18 @@ char* bs64v_encode(char* source) {
 		//6位最大取值64，即刚好为字符表内字符数，以值作为下标取字符
 	}
 	//处理原数据长度不为3倍数的情况
-	memset(&rt_code[i], '=', 4);
+	memset(&rt_code[i + 1], '=', 3);
+	rt_code[i] = _bs64v_table[(source[j] >> 2)];
 	switch (source_len % 3)
 	{
 	case 1:
-		rt_code[i] = _bs64v_table[(source[j] >> 2)];
 		rt_code[i + 1] = _bs64v_table[(source[j] & 0x3) << 4];
 		break;
 	case 2:
-		rt_code[i] = _bs64v_table[(source[j] >> 2)];
 		rt_code[i + 1] = _bs64v_table[((source[j] & 0x3) << 4) | (source[j + 1] >> 4)];
 		rt_code[i + 2] = _bs64v_table[(source[j + 1] & 0xf) << 2];
 		break;
 	default:
-		rt_code[i] = _bs64v_table[(source[j] >> 2)];
 		rt_code[i + 1] = _bs64v_table[((source[j] & 0x3) << 4) | (source[j + 1] >> 4)];	
 		rt_code[i + 2] = _bs64v_table[((source[j + 1] & 0xf) << 2) | (source[j + 2] >> 6)];
 		rt_code[i + 3] = _bs64v_table[(source[j + 2] & 0x3f)];
@@ -79,10 +78,10 @@ char* bs64v_decode(char* bs64v_code) {
 	};//判断空字节符 '='的数量
 
 	int decode_len = (bscode_len - 4) / 4 * 3 + 3 - nullcount;	//解码后字符串长度
-	printf("debug: decode len:%d\n", decode_len);
-	char* decode_tmp = new char[decode_len + 1];
-	if (!decode_tmp)return 0;
-	decode_tmp[decode_len] = '\0';	//环境初始化完成
+	char* decode_tmp;
+	try{decode_tmp = new char[decode_len + 1](); }
+	catch (std::bad_alloc) { return 0; }
+
 
 	int i = 0, j = 0;
 	for (; i < bscode_len - 4; i += 4, j += 3) {

@@ -22,6 +22,12 @@ void testbs64v() {
 	getchar();
 }
 
+void setStartup(int id) {
+	char* text_debug = GetItemValue(id,(char*)"debug");
+	if (strncmp(text_debug, "true", strnlen_s(text_debug, 32))) { Debug_mode(false); printf("startup config: debug info output was off\n");}
+	else { Debug_mode(true); printf("startup config: debug info output was on\n"); }
+}
+
 int main() {
 	//testbs64v();
 	printf("DFM service alpha 0.2\nbs64v lib ver_%s\n", BS64_V);
@@ -44,6 +50,8 @@ int main() {
 		printf("存在启动配置文件，正尝试加载.\n");
 		id_tmp = OpenConfigFile(GetItemValue(startid, (char*)"openconf"));
 		startinit = true;
+		setStartup(startid);	//从启动配置中读取其它额外设置
+		CloseConfigFile(startid);
 	}
 
 	if (!startinit) {
@@ -59,7 +67,7 @@ int main() {
 			fclose(tmp);
 			printf("Success!\n");
 		}
-
+		switch_exit:
 		printf("\nOpen file: ");
 		getline(in_tmp);
 
@@ -81,6 +89,9 @@ int main() {
 	memset(in_buffer, 0, 512);
 	int rt1 = 0, rt2 = 0, rt3 = 0;
 	char* rt4 = 0;
+
+	//int now_file = 0;
+
 	while (true)
 	{
 		printf("\n操作 增/删/查/改/退出/Debug on/off (a/d/s/r/e/i): ");
@@ -90,7 +101,7 @@ int main() {
 		{
 		case 'e':
 			CloseConfigFile(id_tmp);
-			return 0;
+			goto switch_exit;
 		case 'r':
 			printf("要改值的项: ");
 			rt1 = getline(in_buffer);
