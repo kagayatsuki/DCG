@@ -142,6 +142,7 @@
   <ItemGroup>
     <ClInclude Include="base64_variation.h" />
     <ClInclude Include="config.h" />
+    <ClInclude Include="recycle.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="terminal.cpp" />
