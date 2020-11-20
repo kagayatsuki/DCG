@@ -190,6 +190,7 @@ namespace FRC_STRUCT {	//File space recycle struct
 		else {
 			recycle_obj_list = tmp->next_obj;
 		}
+		obj_count--;
 		delete tmp;
 		return 0;
 	}
@@ -272,7 +273,9 @@ namespace FRC_STRUCT {	//File space recycle struct
 			}
 			obj_tmp->block_list = blank_t;
 			a_w = blank_t;
+			obj_tmp->block_count++;
 		}
+		safeguard_write(obj_tmp, a_w);
 		block_t = safeguard_get_block(obj_tmp, a_w->ptr + a_w->length);
 		if (block_t) {
 			a_w->length += block_t->length;
@@ -281,9 +284,7 @@ namespace FRC_STRUCT {	//File space recycle struct
 			safeguard_write(obj_tmp, a_w);
 			safeguard_write(obj_tmp, block_t);
 		}
-		else {
-			safeguard_write(obj_tmp, a_w);
-		}
+
 	}
 }
 

@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <new>
 #include "base64_variation.h"
+#include "recycle.h"
 
 #define Type_String 1
 #define Type_Short 2
@@ -36,6 +37,7 @@ typedef struct config_info {
 	char* filename;
 	FILE* local;
 	int item_count;
+	int recycle_id;
 	config_item* item_list;
 
 	config_info* last;
@@ -188,8 +190,16 @@ int obj_insertitem(config_info* obj,char* itemname, char* itemvalue, char readmo
 	memset(bu_blank, 0, 32);
 	if (!readmode) {											//在非读入模式调用下才对本地数据进行写入，否则总是写入会造成数据复写
 		DebugInvolke printf("Debug: Writing to local.\n");
-
-		fseek(obj->local, -32, SEEK_END);
+		FRC_STRUCT::recycle_block* tmp_b = FRC_STRUCT::get_block(obj->recycle_id, this_->datalen);
+		if (tmp_b) {
+			FRC_STRUCT::report_block(obj->recycle_id, tmp_b->ptr, tmp_b->ptr + this_->datalen, tmp_b->length - this_->datalen);
+			DebugInvolke printf("Debug: using recycle in offset: %d\n",tmp_b->ptr);
+			fseek(obj->local, tmp_b->ptr, SEEK_SET);
+		}
+		else
+		{
+			fseek(obj->local, -32, SEEK_END);
+		}
 		this_->ptr_local = ftell(obj->local);
 		fwrite(&f_start, 1, 1, obj->local);
 		fwrite(bs64v_encrypt_buffer_w, strnlen_s(bs64v_encrypt_buffer_w,MAX_CODE_LEN), 1, obj->local);
@@ -242,11 +252,12 @@ int obj_removeitem(int id, char* itemname) {
 	this_item = item_get(id, itemname);
 	if (!this_item)return -2;
 
-	//准备覆盖原数据的空字节	目前的移除方式就是将数据覆写为0，因为目前的算法在读取文件时跳过字节0，空间回收在未来优化
+	//准备覆盖原数据的空字节	目前的移除方式就是将数据覆写为0，因为目前的算法在读取文件时跳过字节0，***空间回收在未来优化
 	char* buffer;
 	try { buffer = new char[this_item->datalen](); }
 	catch (std::bad_alloc) { return -3; }
-
+	FRC_STRUCT::report_block(obj_tmp->recycle_id, this_item->ptr_local, this_item->ptr_local, this_item->datalen);//回收空间
+	DebugInvolke printf("Debug: recycle in offset: %d\n", this_item->ptr_local);
 	fseek(obj_tmp->local, this_item->ptr_local, SEEK_SET);
 	fwrite(buffer, this_item->datalen, 1, obj_tmp->local);
 	delete[] buffer;								//回收内存
@@ -325,6 +336,8 @@ int obj_rewriteitem(int id, char* itemname, char* value) {
 		fwrite(&f_name, 1, 1, obj_tmp->local);
 		fwrite(bs64v_encrypt_buffer_v, newvaluelen, 1, obj_tmp->local);		//写入新值数据
 		fwrite(&f_end, 1, 1, obj_tmp->local);				//写入flag end
+		FRC_STRUCT::report_block(obj_tmp->recycle_id, ftell(obj_tmp->local), ftell(obj_tmp->local), nowvaluelen - newvaluelen);//向垃圾处理机制汇报此处空出的空间
+		DebugInvolke printf("Debug: recycle in offset: %d length(%d)\n", ftell(obj_tmp->local), nowvaluelen - newvaluelen);
 		delete[] buffer;
 	}
 	else
@@ -332,8 +345,30 @@ int obj_rewriteitem(int id, char* itemname, char* value) {
 		//以下代码不应在执行时出错，除非磁盘空间不足，但我懒得检测，不会有人连个几M的配置文件都放不下吧
 		fseek(obj_tmp->local, this_item->ptr_local, SEEK_SET);
 		fwrite(buffer, this_item->datalen, 1, obj_tmp->local);
+		FRC_STRUCT::recycle_block tmp_aim;
+		FRC_STRUCT::recycle_block* tmp_b = FRC_STRUCT::safeguard_get_block(FRC_STRUCT::get_obj(obj_tmp->recycle_id), ftell(obj_tmp->local));//对接回收机制
+		if (tmp_b && (tmp_b->length >= newvaluelen - nowvaluelen)) {
+			tmp_aim.ptr = ftell(obj_tmp->local)-this_item->datalen;
+			tmp_aim.length = this_item->datalen;
+			FRC_STRUCT::report_block(obj_tmp->recycle_id, ftell(obj_tmp->local), ftell(obj_tmp->local) + (newvaluelen - nowvaluelen), tmp_b->length - (newvaluelen - nowvaluelen));//汇报
+			DebugInvolke printf("Debug: using recycle in offset: %d\n", tmp_b->ptr);
+		}
+		else if (tmp_b = FRC_STRUCT::get_block(obj_tmp->recycle_id, newvaluelen + newnamelen + 3)) {
+			tmp_aim = *tmp_b;
+			FRC_STRUCT::report_block(obj_tmp->recycle_id, tmp_b->ptr, tmp_b->ptr + this_item->datalen, tmp_b->length - this_item->datalen);
+			DebugInvolke printf("Debug: using recycle in offset: %d\n", tmp_b->ptr);
+		}
+		else {
+			tmp_aim.length = 0;
+		}
 		delete[](buffer);
-		fseek(obj_tmp->local, -32, SEEK_END);			//新的数据写到文件末端
+		if (tmp_aim.length) {
+			fseek(obj_tmp->local, tmp_b->ptr, SEEK_SET);	//回收机制找到的空间
+		}
+		else {
+			fseek(obj_tmp->local, -32, SEEK_END);			//新的数据写到文件末端
+		}
+		
 		this_item->ptr_local = ftell(obj_tmp->local);
 		fwrite(&f_start, 1, 1, obj_tmp->local);
 		fwrite(bs64v_encrypt_buffer_w, newnamelen, 1, obj_tmp->local);
@@ -418,6 +453,12 @@ int obj_loaditem(config_info* obj) {
 		delete[](tmp_itemname);
 		delete[](tmp_itemvalue);
 	}
+	char* rc_name = new char[strnlen_s(obj->filename, 1024) + 5]();
+	memcpy_s(rc_name, strnlen_s(obj->filename, 1024) + 5, obj->filename, strnlen_s(obj->filename, 1024) + 1);
+	memcpy_s(rc_name + strnlen_s(obj->filename, 1024), 4, ".rcd", 4);
+	obj->recycle_id = FRC_STRUCT::new_recycle_obj(rc_name);
+	DebugInvolke printf("Debug: recycle file -> %s\nObject id: %d\n",rc_name,obj->recycle_id);
+	delete[] rc_name;
 	return 0;
 }
 
@@ -444,7 +485,8 @@ int OpenConfigFile(char* filename) {
 void CloseConfigFile(int id) {
 	config_info* tmp = obj_get(id);
 	if (tmp) {
-		printf("Close file id %d\n",id);
+		DebugInvolke printf("Debug: close file id %d\n",id);
+		FRC_STRUCT::close_recycle_obj(tmp->recycle_id);
 		obj_free(tmp);
 	}
 	return;

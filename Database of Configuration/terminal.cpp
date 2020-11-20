@@ -70,7 +70,7 @@ int main() {
 		switch_exit:
 		printf("\nOpen file: ");
 		getline(in_tmp);
-
+		if (!strncmp(in_tmp, "exit", strnlen_s(in_tmp, 128)))return 0;
 		id_tmp = OpenConfigFile(in_tmp);
 		memset(in_tmp, 0, 128);
 	}
