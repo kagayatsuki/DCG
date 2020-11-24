@@ -2,6 +2,7 @@
 //==========================================
 //Database rubbish recycle module
 //Author: shinsya
+//该方案作废
 //==========================================
 
 #ifndef RECYCLE_H

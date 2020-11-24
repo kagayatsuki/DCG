@@ -143,6 +143,7 @@
     <ClInclude Include="base64_variation.h" />
     <ClInclude Include="config.h" />
     <ClInclude Include="recycle.h" />
+    <ClInclude Include="recycle_memv.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="terminal.cpp" />
