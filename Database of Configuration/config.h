@@ -7,7 +7,6 @@
 #include <stdio.h>
 #include <new>
 #include "base64_variation.h"
-//#include "recycle.h"
 #include "recycle_memv.h"
 
 #define Type_String 1
@@ -24,7 +23,6 @@ char f_start = 12, f_name = 16, f_end = 18;
 typedef struct config_item {	//字节标识符: 12-item start; 16-name end; 18-item end; 
 	char* item_name;
 	char* value;
-	//char value_type;
 	
 	int ptr_local;
 	int datalen;
@@ -192,12 +190,12 @@ int obj_insertitem(config_info* obj,char* itemname, char* itemvalue, char readmo
 	if (!readmode) {											//在非读入模式调用下才对本地数据进行写入，否则总是写入会造成数据复写
 		DebugInvolke printf("Debug: Writing to local.\n");
 		mem_table* tmp_b = table_acquire(obj->recycle_id, this_->datalen);
-		//FRC_STRUCT::recycle_block* tmp_b = FRC_STRUCT::get_block(obj->recycle_id, this_->datalen);
+		
 		if (tmp_b) {
 			fseek(obj->local, tmp_b->local_ptr, SEEK_SET);
 			DebugInvolke printf("Debug: using recycle in offset: %d\n", tmp_b->local_ptr);
 			setTableObject(obj->recycle_id, tmp_b, tmp_b->local_ptr + this_->datalen, tmp_b->length - this_->datalen);	//原回收利用汇报机制
-			//FRC_STRUCT::report_block(obj->recycle_id, tmp_b->ptr, tmp_b->ptr + this_->datalen, tmp_b->length - this_->datalen);
+			
 		}
 		else
 		{
@@ -261,7 +259,7 @@ int obj_removeitem(int id, char* itemname) {
 	try { buffer = new char[this_item->datalen](); }
 	catch (std::bad_alloc) { return -3; }
 	table_new(obj_tmp->recycle_id, this_item->ptr_local, this_item->datalen);	//回收空间
-	//FRC_STRUCT::report_block(obj_tmp->recycle_id, this_item->ptr_local, this_item->ptr_local, this_item->datalen);
+	
 	DebugInvolke printf("Debug: recycle in offset: %d\n", this_item->ptr_local);
 	fseek(obj_tmp->local, this_item->ptr_local, SEEK_SET);
 	fwrite(buffer, this_item->datalen, 1, obj_tmp->local);
@@ -342,7 +340,7 @@ int obj_rewriteitem(int id, char* itemname, char* value) {
 		fwrite(bs64v_encrypt_buffer_v, newvaluelen, 1, obj_tmp->local);		//写入新值数据
 		fwrite(&f_end, 1, 1, obj_tmp->local);				//写入flag end
 		table_new(obj_tmp->recycle_id, ftell(obj_tmp->local), nowvaluelen - newvaluelen);	//向垃圾处理机制汇报此处空出的空间
-		//FRC_STRUCT::report_block(obj_tmp->recycle_id, ftell(obj_tmp->local), ftell(obj_tmp->local), nowvaluelen - newvaluelen);
+		
 		DebugInvolke printf("Debug: recycle in offset: %d length(%d)\n", ftell(obj_tmp->local), nowvaluelen - newvaluelen);
 		delete[] buffer;
 	}
@@ -354,10 +352,8 @@ int obj_rewriteitem(int id, char* itemname, char* value) {
 		mem_table* tmp_aim = table_getByOffset(obj_tmp->recycle_id, ftell(obj_tmp->local));	//对接回收机制
 		mem_table tmp_block;
 		
-		//bool require_d = false;
 		tmp_block.length = 0;
-		//FRC_STRUCT::recycle_block tmp_aim;
-		//FRC_STRUCT::recycle_block* tmp_b = FRC_STRUCT::safeguard_get_block(FRC_STRUCT::get_obj(obj_tmp->recycle_id), ftell(obj_tmp->local));
+		
 		if (tmp_aim) {
 			if (tmp_aim->length < (newnamelen + newvaluelen + 3 - this_item->datalen)) {	//如果这块数据后面本来有待回收空间，则看它是否够用，如果不够则尝试获得一块足够的待回收空间
 				if (tmp_aim = table_acquire(obj_tmp->recycle_id, newnamelen + newvaluelen + 3)) {
@@ -440,14 +436,14 @@ int obj_loaditem(config_info* obj) {
 	DebugInvolke printf("Debug: loading file...\n");
 	for (int i = 0; i < datalen; i++) {
 		fread(&char_buff, 1, 1, obj->local);
-		if (char_buff == 0) { //字节0 跳过
+		if (char_buff == 0) { //字节0 记录并跳过
 			if (!rec_data.ging)rec_data.ptr = ftell(obj->local) - 1;	//本地文件空白数据开始处相对文件头偏移量
 			rec_data.ging = true; 
 			rec_data.length++;
 			continue; 
 		}	
 
-		if (rec_data.ging) {
+		if (rec_data.ging) {	//连续的待回收空间中断,记录为表
 			rec_data.ging = false;
 			table_new(obj->recycle_id, rec_data.ptr, rec_data.length);
 			rec_data.ptr = 0;
@@ -461,7 +457,7 @@ int obj_loaditem(config_info* obj) {
 
 			obj_insertitem(obj, tmp_itemname, tmp_itemvalue, 1, ptr_local);
 			memset(buffer, 0, 512 / 3 * 4 + 4);
-			//obj->item_count++;
+
 			offset = 0;		//值数据段结束，数组下标归零
 			continue;
 		}
@@ -469,8 +465,8 @@ int obj_loaditem(config_info* obj) {
 		//遇到字节标识符 12 - 成员头
 		if (char_buff == 12) 
 		{ 
-			offset = 0;		//名数据段开始，数组下标归零，同时开始读入值数据段
-			ptr_local = ftell(obj->local) - 1;	//数据头在文件中的位置(相对于文件第0个字节)
+			offset = 0;										//名数据段开始，数组下标归零，同时开始读入值数据段
+			ptr_local = ftell(obj->local) - 1;				//数据头在文件中的位置(相对于文件第0个字节)
 			continue; 
 		}
 
@@ -484,22 +480,17 @@ int obj_loaditem(config_info* obj) {
 			offset = 0;		//名数据段结束，数组下标归零
 			continue;
 		}
-		buffer[offset] = char_buff;	//将刚刚读入的字节填入数据数组
-		offset++;	//若非标识符和字节0，则作为数据读入数组，数组下标偏移自增
+		buffer[offset] = char_buff;		//将刚刚读入的字节填入数据数组
+		offset++;			//若非标识符和字节0，则作为数据读入数组，数组下标偏移自增
 	}
 
 	//回收内存
-	{
-		delete[](tmp_itemname);
-		delete[](tmp_itemvalue);
-	}
-	char* rc_name = new char[strnlen_s(obj->filename, 1024) + 5]();
-	memcpy_s(rc_name, strnlen_s(obj->filename, 1024) + 5, obj->filename, strnlen_s(obj->filename, 1024) + 1);
-	memcpy_s(rc_name + strnlen_s(obj->filename, 1024), 4, ".rcd", 4);
+	delete[](tmp_itemname);
+	delete[](tmp_itemvalue);
 	
-	DebugInvolke printf("Debug: recycle file -> %s\nObject id: %d\n",rc_name,obj->recycle_id);
+	DebugInvolke printf("Debug: recycle object -> %d\n", obj->recycle_id);
 	printRecycleObjectInfo(obj->recycle_id);
-	delete[] rc_name;
+	
 	return 0;
 }
 
@@ -515,7 +506,7 @@ int OpenConfigFile(char* filename) {
 	int tmp_strn = strnlen_s(filename, 1024);
 	try { tmp->filename = new char[tmp_strn + 1](); }
 	catch(std::bad_alloc) { obj_free(tmp); return -1; }				//不能打开文件，返回-1
-	//memset(tmp->filename, 0, tmp_strn + 1);
+
 	memcpy_s(tmp->filename, tmp_strn + 1, filename, tmp_strn);		//存放文件名到内存中
 	int obj_rt = obj_loaditem(tmp);
 	if (obj_rt) { obj_free(tmp); return -2; }			//出现加载错误，卸载对象并返回-2
@@ -528,7 +519,7 @@ void CloseConfigFile(int id) {
 	if (tmp) {
 		DebugInvolke printf("Debug: close file id %d\n",id);
 		freeRecycleTableObject(tmp->recycle_id);
-		//FRC_STRUCT::close_recycle_obj(tmp->recycle_id);
+
 		obj_free(tmp);
 	}
 	return;
