@@ -45,7 +45,7 @@ int created_count = 0;
 mem_object* obj_table = 0;
 
 mem_object* obj_getByID(int id) {	//内部函数，通过id获得对象内存地址
-	if (id > OBJ_ID_START + object_count - 1)return 0;
+	if (id > OBJ_ID_START + created_count - 1)return 0;
 	mem_object* loop_t = obj_table;
 	for (int i = 0; i < object_count; i++) {	//传统遍历以点到为止
 		if (loop_t->id == id)return loop_t;		//传统遍历是讲判断的
@@ -75,8 +75,23 @@ mem_table* table_get(int object_id, long offset, int length, bool offset_) {
 	return 0;
 }
 
+//获得满足长度需要的那个表
 mem_table* table_acquire(int object_id, int length) {
-
+	mem_object* obj_tmp = obj_getByID(object_id);
+	if (!obj_tmp) {
+		DebugInvoke printf("Debug: recycle exception->acquire->Unkown object id(%d)\n", object_id); 
+		return 0;
+	}
+	mem_table* tmp = obj_tmp->list;
+	mem_table* miniz = 0;
+	for (int i = 0; i < obj_tmp->table_count; i++) {	//找到满足长度需要的长度最小的那个表
+		if (tmp->length >= length) {
+			if (miniz) { if (tmp->length < miniz->length)miniz = tmp; }
+			else miniz = tmp;
+		}
+		tmp = tmp->next;
+	}
+	return miniz;
 }
 
 //释放对象中的某个子表
@@ -126,6 +141,7 @@ void setTableObject(int object_id, mem_table* table,long offset, int length) {
 void table_new(int object_id, long offset, int length) {
 	mem_object* obj_tmp = obj_getByID(object_id);
 	if (!obj_tmp)return;
+	if (!length)return;
 	mem_table* table_tmp = 0;
 	try { table_tmp = new mem_table(); }
 	catch (std::bad_alloc) {
@@ -207,7 +223,7 @@ void printRecycleObjectInfo(int object_id) {
 		printf("Recycle: unkown object (id:%d)\n",object_id);
 		return;
 	}
-	printf("*******Recycle Info*******\nID:%d\tTable:%d\nLength:%d\n**************************\n", tmp->id, tmp->table_count, tmp->length_count);
+	printf("*******Recycle Info*******\nID:%d\t\tTable:%d\nLength:%d\n**************************\n", tmp->id, tmp->table_count, tmp->length_count);
 }
 
 #endif // !RECYCLE_MEMV_H
