@@ -369,11 +369,11 @@ int obj_rewriteitem(int id, char* itemname, char* value) {
 			}
 		}
 		else {	//这块数据后面本来就没有待回收空间
-			if (tmp_aim = table_acquire(obj_tmp->recycle_id, newnamelen + newvaluelen + 3)) { 
-				tmp_block = *tmp_aim; 
+			if (tmp_aim = table_acquire(obj_tmp->recycle_id, newnamelen + newvaluelen + 3)) {
+				tmp_block = *tmp_aim;
 				setTableObject(obj_tmp->recycle_id, tmp_aim, tmp_block.local_ptr + (newnamelen + newvaluelen + 3), tmp_block.length - (newnamelen + newvaluelen + 3));
 			}
-			table_new(obj_tmp->recycle_id, ftell(obj_tmp->local) - this_item->datalen, this_item->datalen);
+			table_new(obj_tmp->recycle_id, ftell(obj_tmp->local) - this_item->datalen, this_item->datalen); 
 		}
 		
 		delete[](buffer);
@@ -390,7 +390,7 @@ int obj_rewriteitem(int id, char* itemname, char* value) {
 		fwrite(&f_name, 1, 1, obj_tmp->local);
 		fwrite(bs64v_encrypt_buffer_v, newvaluelen, 1, obj_tmp->local);
 		fwrite(&f_end, 1, 1, obj_tmp->local);
-		fwrite(fixbytes, 32, 1, obj_tmp->local);
+		if(tmp_block.length)fwrite(fixbytes, 32, 1, obj_tmp->local);
 	}
 	if (bs64v_encrypt_buffer_w)delete[](bs64v_encrypt_buffer_w);
 	if (bs64v_encrypt_buffer_v)delete[](bs64v_encrypt_buffer_v);

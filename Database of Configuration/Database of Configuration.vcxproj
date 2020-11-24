@@ -141,7 +141,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="base64_variation.h" />
-    <ClInclude Include="config.h" />
+    <ClInclude Include="database.h" />
     <ClInclude Include="recycle.h" />
     <ClInclude Include="recycle_memv.h" />
   </ItemGroup>
